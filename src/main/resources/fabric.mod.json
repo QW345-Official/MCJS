@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "mcjs",
+  "version": "${version}",
+  "name": "MCJS",
+  "description": "一个可以用来执行js代码的mc mod",
+  "authors": ["QW345_"],
+  "contact": {
+    "homepage": "https://qw345x.top/",
+    "sources": "https://qw345x.top/"
+  },
+  "license": "CC0-1.0",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.qw345.mcjs.ExampleMod"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "minecraft": "~1.21.8",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
