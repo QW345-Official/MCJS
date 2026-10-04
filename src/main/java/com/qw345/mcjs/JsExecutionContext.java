@@ -7,31 +7,31 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.storage.LevelResource;
 
 public final class JsExecutionContext {
-	private static final ThreadLocal<JsExecutionContext> CURRENT = new ThreadLocal<>();
+    private static final ThreadLocal<JsExecutionContext> CURRENT = new ThreadLocal<>();
 
-	public final CommandSourceStack source;
-	public final MinecraftServer server;
-	public final Path modDataDir;
+    public final CommandSourceStack source;
+    public final MinecraftServer server;
+    public final Path modDataDir;
+    public final Path configDir;
 
+    public ScriptEngine engine;
 
-	public ScriptEngine engine;
+    public JsExecutionContext(CommandSourceStack source, MinecraftServer server) {
+        this.source = source;
+        this.server = server;
+        this.modDataDir = server.getWorldPath(LevelResource.ROOT).resolve(ExampleMod.MOD_ID);
+        this.configDir = server.getServerDirectory().resolve("config").resolve(ExampleMod.MOD_ID);
+    }
 
-	public JsExecutionContext(CommandSourceStack source, MinecraftServer server) {
-		this.source = source;
-		this.server = server;
+    public static JsExecutionContext current() {
+        return CURRENT.get();
+    }
 
-		this.modDataDir = server.getWorldPath(LevelResource.ROOT).resolve(ExampleMod.MOD_ID);
-	}
+    public static void set(JsExecutionContext ctx) {
+        CURRENT.set(ctx);
+    }
 
-	public static JsExecutionContext current() {
-		return CURRENT.get();
-	}
-
-	public static void set(JsExecutionContext ctx) {
-		CURRENT.set(ctx);
-	}
-
-	public static void clear() {
-		CURRENT.remove();
-	}
+    public static void clear() {
+        CURRENT.remove();
+    }
 }

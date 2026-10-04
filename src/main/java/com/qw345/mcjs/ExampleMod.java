@@ -1,8 +1,8 @@
 package com.qw345.mcjs;
 
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.level.storage.LevelResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,12 +12,14 @@ public class ExampleMod implements ModInitializer {
 
     @Override
     public void onInitialize() {
-
-        
         JsCommand.register();
-        
 
-        
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+            CommandPersistence.init(
+                server.getServerDirectory().resolve("config").resolve(MOD_ID));
+            CommandRestore.restoreAll(server);
+        });
+
         LOGGER.info("MCJS loaded: /js <script>");
         LOGGER.info("Use /js set <key> <value> to configure options");
         LOGGER.info("Available options: infoDisplay, errDisplay, customCommandInfo, codeLenLimit, codeTimeLimit, currentCodeLimit");

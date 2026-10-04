@@ -10,12 +10,9 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.Semaphore;
+import javax.script.Invocable;
 import javax.script.ScriptEngine;
 import javax.script.ScriptException;
-import javax.script.Invocable;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
@@ -24,8 +21,6 @@ import org.openjdk.nashorn.api.scripting.NashornScriptEngineFactory;
 public final class JsEngine {
     private static final ConfigManager CONFIG = ConfigManager.getInstance();
     private static final NashornScriptEngineFactory FACTORY = new NashornScriptEngineFactory();
-    private static final Semaphore EXECUTION_SEMAPHORE = new Semaphore(1);
-    private static volatile int currentConcurrentExecutions = 0;
 
     private static final ExecutorService JS_EXECUTOR = Executors.newCachedThreadPool(r -> {
         Thread t = new Thread(r, "js-command-executor");
@@ -35,7 +30,7 @@ public final class JsEngine {
 
     private static final DateTimeFormatter LOG_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    private static final String SHIM = 
+    private static final String SHIM =
         "var runCommand = function(c){ return JsApi.runCommand(c); };\n"
         + "var registerCommand = function(n,l,f){ \n"
         + "  if (typeof l === 'function') { f = l; l = 2; }\n"
@@ -53,7 +48,6 @@ public final class JsEngine {
     public static void executeAsync(CommandSourceStack source, String script) {
         int maxLen = CONFIG.getInt("codeLenLimit", 10000);
         long timeout = CONFIG.getLong("codeTimeLimit", 5000);
-        int maxConcurrent = CONFIG.getInt("currentCodeLimit", 1);
 
         final String scriptText = script == null ? "" : script;
         if (scriptText.length() > maxLen) {
@@ -64,71 +58,38 @@ public final class JsEngine {
             return;
         }
 
-        // 并发控制
-        synchronized (JsEngine.class) {
-            if (currentConcurrentExecutions >= maxConcurrent) {
-                if (CONFIG.getBoolean("errDisplay", true)) {
-                    source.sendSystemMessage(Component.literal("[js] ERROR: max concurrent scripts reached (" + maxConcurrent + ")")
-                        .withStyle(ChatFormatting.RED));
-                }
-                return;
-            }
-            currentConcurrentExecutions++;
-        }
-
         final String code = SHIM + scriptText;
         final long start = System.currentTimeMillis();
-        
+
         Future<?> future = JS_EXECUTOR.submit(() -> {
+            JsExecutionContext ctx = new JsExecutionContext(source, source.getServer());
+            JsExecutionContext.set(ctx);
             try {
-                JsExecutionContext ctx = new JsExecutionContext(source, source.getServer());
-                JsExecutionContext.set(ctx);
+                ScriptEngine engine = FACTORY.getScriptEngine();
+                ctx.engine = engine;
+                engine.put("JsApi", new JsApi());
+
                 try {
-                    ScriptEngine engine = FACTORY.getScriptEngine();
-                    ctx.engine = engine;
-                    engine.put("JsApi", new JsApi());
-                    
-                    // 使用更严格的超时控制
-                    final Thread execThread = Thread.currentThread();
-                    Future<?> timeoutFuture = JS_EXECUTOR.submit(() -> {
-                        try {
-                            Thread.sleep(timeout);
-                            execThread.interrupt();
-                        } catch (InterruptedException ignored) {}
-                    });
-                    
-                    try {
-                        Object result = engine.eval(code);
-                        timeoutFuture.cancel(true);
-                        onDone(source, ctx, scriptText, "OK", result == null ? "(undefined)" : String.valueOf(result), start);
-                    } catch (ScriptException e) {
-                        timeoutFuture.cancel(true);
-                        onDone(source, ctx, scriptText, "ERROR", rootMessage(e), start);
-                    } catch (Throwable t) {
-                        timeoutFuture.cancel(true);
-                        onDone(source, ctx, scriptText, "ERROR", rootMessage(t), start);
-                    }
-                } finally {
-                    JsExecutionContext.clear();
-                    synchronized (JsEngine.class) {
-                        currentConcurrentExecutions--;
-                    }
+                    Object result = engine.eval(code);
+                    onDone(source, ctx, scriptText, "OK",
+                        result == null ? "(undefined)" : String.valueOf(result), start);
+                } catch (ScriptException e) {
+                    onDone(source, ctx, scriptText, "ERROR", rootMessage(e), start);
+                } catch (Throwable t) {
+                    onDone(source, ctx, scriptText, "ERROR", rootMessage(t), start);
                 }
             } catch (Throwable t) {
-                // 捕获所有异常防止线程崩溃
                 try {
                     onDone(source, null, scriptText, "ERROR", "Internal error: " + t, start);
                 } catch (Exception ignored) {}
-                synchronized (JsEngine.class) {
-                    currentConcurrentExecutions--;
-                }
+            } finally {
+                JsExecutionContext.clear();
             }
         });
 
-        // 使用独立的监控线程，避免超时导致"Software caused connection abort"
+
         Thread watchdog = new Thread(() -> {
             try {
-                // 使用较短的检查间隔，以便更及时响应中断
                 long elapsed = 0;
                 long checkInterval = 100;
                 while (elapsed < timeout && !future.isDone()) {
@@ -137,7 +98,8 @@ public final class JsEngine {
                 }
                 if (!future.isDone()) {
                     future.cancel(true);
-                    Path logFile = source.getServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT)
+                    Path logFile = source.getServer()
+                        .getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT)
                         .resolve(ExampleMod.MOD_ID).resolve("js_execution.log");
                     appendLog(logFile, source, scriptText, "TIMEOUT",
                         "exceeded " + timeout + "ms", System.currentTimeMillis() - start);
@@ -146,12 +108,8 @@ public final class JsEngine {
                             Component.literal("[js] ERROR: script timed out after " + timeout + "ms")
                                 .withStyle(ChatFormatting.RED)));
                     }
-                    synchronized (JsEngine.class) {
-                        if (currentConcurrentExecutions > 0) currentConcurrentExecutions--;
-                    }
                 }
-            } catch (InterruptedException e) {
-                // 正常结束
+            } catch (InterruptedException ignored) {
             }
         }, "js-command-watchdog");
         watchdog.setDaemon(true);
@@ -162,18 +120,17 @@ public final class JsEngine {
             String status, String message, long start) {
         long ms = System.currentTimeMillis() - start;
         boolean isError = !"OK".equals(status);
-        
+
         if (CONFIG.getBoolean("logExecution", true)) {
-            Path logDir = ctx != null ? ctx.modDataDir : 
+            Path logDir = ctx != null ? ctx.modDataDir :
                 source.getServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT)
                     .resolve(ExampleMod.MOD_ID);
             appendLog(logDir.resolve("js_execution.log"), source, script, status, message, ms);
         }
 
-        // 发送消息，根据配置决定是否显示
         boolean showInfo = CONFIG.getBoolean("infoDisplay", true);
         boolean showErr = CONFIG.getBoolean("errDisplay", true);
-        
+
         if ((isError && showErr) || (!isError && showInfo)) {
             source.getServer().execute(() -> {
                 Component line = isError
@@ -200,15 +157,33 @@ public final class JsEngine {
         }
     }
 
-    public static void invokeRegistered(Object engineObj, String globalName, CommandSourceStack source) {
+    public static void invokeRegistered(Object engineObj, String globalName,
+                                        CommandSourceStack source, String args) {
         ScriptEngine engine = (ScriptEngine) engineObj;
         JsExecutionContext ctx = new JsExecutionContext(source, source.getServer());
         boolean showInfo = CONFIG.getBoolean("customCommandInfo", true);
-        
+
         JS_EXECUTOR.submit(() -> {
             JsExecutionContext.set(ctx);
             try {
-                Object result = ((Invocable) engine).invokeFunction(globalName, new Object[]{ source.getTextName() });
+                String arg1 = "";
+                String customname = "";
+                String raw = args == null ? "" : args;
+                int idx = -1;
+                for (int i = 0; i < raw.length(); i++) {
+                    if (Character.isWhitespace(raw.charAt(i))) { idx = i; break; }
+                }
+                if (idx < 0) {
+                    arg1 = raw;
+                } else {
+                    arg1 = raw.substring(0, idx);
+                    customname = raw.substring(idx + 1);
+                }
+                String playerName = source.getTextName();
+
+                Object result = ((Invocable) engine).invokeFunction(
+                    globalName, playerName, arg1, customname);
+
                 String r = result == null ? "(undefined)" : String.valueOf(result);
                 if (showInfo) {
                     deliver(source, "[" + globalName + "] " + r, false);

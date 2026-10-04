@@ -32,7 +32,7 @@ public final class JsCommand {
                 .then(Commands.literal("set")
                     .then(Commands.argument("key", StringArgumentType.word())
                         .then(Commands.argument("value", StringArgumentType.greedyString())
-                            .executes(ctx -> setOption(ctx.getSource(), 
+                            .executes(ctx -> setOption(ctx.getSource(),
                                 StringArgumentType.getString(ctx, "key"),
                                 StringArgumentType.getString(ctx, "value"))))))
                 .then(Commands.literal("reset")
@@ -86,7 +86,10 @@ public final class JsCommand {
                 server.getCommands().getDispatcher().register(
                     Commands.literal(name)
                         .requires(Commands.hasPermission(requiredLevel))
-                        .executes(c -> invokeRegistered(c.getSource(), name))
+                        .executes(c -> invokeRegistered(c.getSource(), name, ""))
+                        .then(Commands.argument("args", StringArgumentType.greedyString())
+                            .executes(c -> invokeRegistered(c.getSource(), name,
+                                StringArgumentType.getString(c, "args"))))
                 );
                 future.complete("REGISTERED: /" + name + " (level " + requiredLevel + ")");
             } catch (Throwable t) {
@@ -103,14 +106,14 @@ public final class JsCommand {
         }
     }
 
-    private static int invokeRegistered(CommandSourceStack source, String name) {
+    private static int invokeRegistered(CommandSourceStack source, String name, String args) {
         RegisteredHandler h = REGISTERED.get(name);
         if (h == null) {
             source.sendSystemMessage(Component.literal("[js] ERROR: command no longer registered")
                 .withStyle(ChatFormatting.RED));
             return 0;
         }
-        JsEngine.invokeRegistered(h.engine(), h.globalName(), source);
+        JsEngine.invokeRegistered(h.engine(), h.globalName(), source, args);
         return 1;
     }
 }

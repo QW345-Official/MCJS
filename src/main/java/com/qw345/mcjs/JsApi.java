@@ -33,16 +33,7 @@ public class JsApi {
     }
 
     public Object registerCommand(String name, Object fn) {
-        JsExecutionContext ctx = JsExecutionContext.current();
-        if (ctx == null) {
-            return "ERROR: no active execution context";
-        }
-        if (name == null || !name.matches("[a-zA-Z0-9_.:-]{1,64}")) {
-            return "ERROR: invalid command name (use letters/digits/_/./:/-)";
-        }
-        // 默认权限等级为2
-        int requiredLevel = 2;
-        return JsCommand.registerDynamicCommand(ctx, name, fn, requiredLevel);
+        return registerCommand(name, 2, fn);
     }
 
     public Object registerCommand(String name, int level, Object fn) {
@@ -56,7 +47,24 @@ public class JsApi {
         if (level < 0 || level > 4) {
             return "ERROR: permission level must be 0-4";
         }
+
+
+        String fnSource = extractFunctionSource(fn);
+        if (fnSource != null) {
+            CommandPersistence.saveOrUpdate(ctx, name, level, fnSource);
+        }
+
         return JsCommand.registerDynamicCommand(ctx, name, fn, level);
+    }
+
+
+    private static String extractFunctionSource(Object fn) {
+        if (fn == null) return null;
+        String s = fn.toString();
+        if (s != null && s.trim().startsWith("function")) {
+            return s.trim();
+        }
+        return null;
     }
 
     public Object saveFile(String path, String content) {
@@ -78,14 +86,13 @@ public class JsApi {
             } else if (content instanceof byte[]) {
                 data = (byte[]) content;
             } else {
-                // 尝试Base64解码
                 try {
                     data = Base64.getDecoder().decode(content.toString());
                 } catch (IllegalArgumentException e) {
                     return "ERROR: content must be string, byte[], or base64 encoded";
                 }
             }
-            
+
             Path root = ctx.modDataDir.toAbsolutePath().normalize();
             Files.createDirectories(root);
             Path target = root.resolve(path).normalize();
@@ -118,22 +125,18 @@ public class JsApi {
                 return "ERROR: file not found: " + path;
             }
             byte[] data = Files.readAllBytes(target);
-            
 
             long maxSize = CONFIG.getLong("maxFileSize", 10485760);
             if (data.length > maxSize) {
                 return "ERROR: file size (" + data.length + " bytes) exceeds limit (" + maxSize + " bytes)";
             }
-            
 
             try {
                 String text = new String(data, StandardCharsets.UTF_8);
-
                 if (isText(text)) {
                     return text;
                 }
-            } catch (Exception e) {
-
+            } catch (Exception ignored) {
             }
             return Base64.getEncoder().encodeToString(data);
         } catch (Exception e) {
