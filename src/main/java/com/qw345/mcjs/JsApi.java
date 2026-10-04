@@ -23,9 +23,13 @@ public class JsApi {
         CompletableFuture<String> future = new CompletableFuture<>();
         server.execute(() -> {
             try {
+                StringBuilder output = new StringBuilder();
                 CommandSourceStack console = server.createCommandSourceStack();
-                server.getCommands().performPrefixedCommand(console, command);
-                future.complete("SUCCESS");
+                CommandSourceStack capturing = console.withCallback((success, result) -> {
+                    output.append(result);
+                });
+                server.getCommands().performPrefixedCommand(capturing, command);
+                future.complete(output.length() == 0 ? "" : output.toString());
             } catch (Throwable t) {
                 future.complete("ERROR: " + t);
             }
