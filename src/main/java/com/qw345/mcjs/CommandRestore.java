@@ -14,7 +14,6 @@ public final class CommandRestore {
             return;
         }
 
-        // 用控制台 source 执行恢复脚本
         CommandSourceStack source = server.createCommandSourceStack();
 
         StringBuilder sb = new StringBuilder();

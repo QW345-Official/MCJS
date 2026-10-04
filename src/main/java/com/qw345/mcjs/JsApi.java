@@ -5,8 +5,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
 import java.util.concurrent.CompletableFuture;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.server.MinecraftServer;
 
 public class JsApi {
     private static final ConfigManager CONFIG = ConfigManager.getInstance();
@@ -23,7 +23,8 @@ public class JsApi {
         CompletableFuture<String> future = new CompletableFuture<>();
         server.execute(() -> {
             try {
-                server.getCommands().performPrefixedCommand(ctx.source, command);
+                CommandSourceStack console = server.createCommandSourceStack();
+                server.getCommands().performPrefixedCommand(console, command);
                 future.complete("SUCCESS");
             } catch (Throwable t) {
                 future.complete("ERROR: " + t);
@@ -48,7 +49,6 @@ public class JsApi {
             return "ERROR: permission level must be 0-4";
         }
 
-
         String fnSource = extractFunctionSource(fn);
         if (fnSource != null) {
             CommandPersistence.saveOrUpdate(ctx, name, level, fnSource);
@@ -56,7 +56,6 @@ public class JsApi {
 
         return JsCommand.registerDynamicCommand(ctx, name, fn, level);
     }
-
 
     private static String extractFunctionSource(Object fn) {
         if (fn == null) return null;

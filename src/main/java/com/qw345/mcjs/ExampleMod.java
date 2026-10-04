@@ -15,8 +15,11 @@ public class ExampleMod implements ModInitializer {
         JsCommand.register();
 
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
-            CommandPersistence.init(
-                server.getServerDirectory().resolve("config").resolve(MOD_ID));
+            java.nio.file.Path configDir =
+                server.getServerDirectory().resolve("config").resolve(MOD_ID);
+
+            ConfigManager.getInstance().init(configDir);
+            CommandPersistence.init(configDir);
             CommandRestore.restoreAll(server);
         });
 

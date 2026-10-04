@@ -87,7 +87,6 @@ public final class JsEngine {
             }
         });
 
-
         Thread watchdog = new Thread(() -> {
             try {
                 long elapsed = 0;

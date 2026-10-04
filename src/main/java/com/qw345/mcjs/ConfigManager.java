@@ -19,7 +19,6 @@ public class ConfigManager {
     private Path configPath;
 
     private ConfigManager() {
-        // 默认值
         options.put("infoDisplay", true);
         options.put("errDisplay", true);
         options.put("customCommandInfo", true);
@@ -28,7 +27,7 @@ public class ConfigManager {
         options.put("currentCodeLimit", 1);
         options.put("logExecution", true);
         options.put("allowBinaryFiles", true);
-        options.put("maxFileSize", 10485760); // 10MB
+        options.put("maxFileSize", 10485760);
     }
 
     public static ConfigManager getInstance() {
@@ -38,18 +37,19 @@ public class ConfigManager {
     public void init(Path modDir) {
         this.configPath = modDir.resolve("config.json");
         load();
+        if (!configPath.toFile().exists()) {
+            save();
+        }
     }
 
     @SuppressWarnings("unchecked")
     public void load() {
         if (configPath == null || !configPath.toFile().exists()) {
-            save();
             return;
         }
         try (FileReader reader = new FileReader(configPath.toFile())) {
             Map<String, Object> loaded = GSON.fromJson(reader, Map.class);
             if (loaded != null) {
-                // 只覆盖已存在的键，保留默认值
                 for (Map.Entry<String, Object> entry : loaded.entrySet()) {
                     if (options.containsKey(entry.getKey())) {
                         options.put(entry.getKey(), entry.getValue());
@@ -81,7 +81,6 @@ public class ConfigManager {
         if (!options.containsKey(key)) {
             return "ERROR: unknown option '" + key + "'";
         }
-        // 类型检查
         Object current = options.get(key);
         if (current instanceof Boolean && !(value instanceof Boolean)) {
             if (value instanceof String) {
@@ -110,7 +109,6 @@ public class ConfigManager {
                 return "ERROR: option '" + key + "' requires numeric value";
             }
         }
-        // 特殊验证
         if (key.equals("codeLenLimit") && ((Number) value).intValue() < 1) {
             return "ERROR: codeLenLimit must be >= 1";
         }
