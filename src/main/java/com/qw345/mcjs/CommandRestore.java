@@ -7,21 +7,28 @@ import net.minecraft.server.MinecraftServer;
 public final class CommandRestore {
     private CommandRestore() {}
 
-    public static void restoreAll(MinecraftServer server) {
+    public static void replayAll(MinecraftServer server) {
         Map<String, String> all = CommandPersistence.loadAll();
         if (all.isEmpty()) {
-            ExampleMod.LOGGER.info("[js] no persisted commands to restore");
+            ExampleMod.LOGGER.info("[js] no persisted commands to replay");
             return;
         }
 
-        CommandSourceStack source = server.createCommandSourceStack();
+        CommandSourceStack console = server.createCommandSourceStack();
 
-        StringBuilder sb = new StringBuilder();
-        for (String line : all.values()) {
-            sb.append(line).append('\n');
-        }
-
-        ExampleMod.LOGGER.info("[js] restoring {} persisted commands", all.size());
-        JsEngine.executeAsync(source, sb.toString());
+        Thread replay = new Thread(() -> {
+            for (Map.Entry<String, String> e : all.entrySet()) {
+                String script = e.getValue();
+                try {
+                    JsEngine.executeSync(console, script);
+                    ExampleMod.LOGGER.info("[js] replayed command: {}", e.getKey());
+                } catch (Throwable t) {
+                    ExampleMod.LOGGER.warn("[js] replay failed for {}: {}", e.getKey(), t.toString());
+                }
+            }
+            ExampleMod.LOGGER.info("[js] replay done, {} commands", all.size());
+        }, "js-command-replay");
+        replay.setDaemon(true);
+        replay.start();
     }
 }

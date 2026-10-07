@@ -25,14 +25,16 @@ public final class CommandPersistence {
         load();
         if (!Files.exists(filePath)) {
             try {
-                Files.writeString(filePath,
-                    "",
-                    StandardCharsets.UTF_8,
+                Files.writeString(filePath, "", StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE);
             } catch (Exception e) {
                 ExampleMod.LOGGER.warn("[js] failed to create registercommands.js: {}", e.toString());
             }
         }
+    }
+
+    public static synchronized boolean isInitialized() {
+        return filePath != null;
     }
 
     public static synchronized void saveOrUpdate(JsExecutionContext ctx,

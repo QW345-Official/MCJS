@@ -50,7 +50,7 @@ public final class JsCommand {
 
     private static int help(CommandSourceStack source) {
         source.sendSuccess(
-            () -> Component.literal("/js <脚本> — 执行JavaScript; /js list — 列出已注册的动态命令; /js set <key> <value> — 设置选项; /js reset — 重置选项"),
+            () -> Component.literal("/js <script> ; /js list ; /js set <key> <value> ; /js reset"),
             false);
         return 1;
     }

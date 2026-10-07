@@ -45,6 +45,29 @@ public final class JsEngine {
 
     private JsEngine() {}
 
+    public static void executeSync(CommandSourceStack source, String script) {
+        int maxLen = CONFIG.getInt("codeLenLimit", 10000);
+        final String scriptText = script == null ? "" : script;
+        if (scriptText.length() > maxLen) {
+            throw new RuntimeException("script too long");
+        }
+
+        final String code = SHIM + scriptText;
+
+        JsExecutionContext ctx = new JsExecutionContext(source, source.getServer());
+        JsExecutionContext.set(ctx);
+        try {
+            ScriptEngine engine = FACTORY.getScriptEngine();
+            ctx.engine = engine;
+            engine.put("JsApi", new JsApi());
+            engine.eval(code);
+        } catch (Throwable t) {
+            throw new RuntimeException(t);
+        } finally {
+            JsExecutionContext.clear();
+        }
+    }
+
     public static void executeAsync(CommandSourceStack source, String script) {
         int maxLen = CONFIG.getInt("codeLenLimit", 10000);
         long timeout = CONFIG.getLong("codeTimeLimit", 5000);
